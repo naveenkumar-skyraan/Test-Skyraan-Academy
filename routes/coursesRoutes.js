@@ -4,7 +4,7 @@ import upload from "../middlewares/upload.js";
 import {
   getCourses,
   getCourseById,
-  getCourseBySlug,        // ✅ ADD THIS
+  getCourseBySlug,    
   createCourse,
   updateCourse,
   deleteCourse,
@@ -17,8 +17,8 @@ const router = express.Router();
 /* ================= PUBLIC ================= */
 router.get("/", getCourses);
 
-/* 🔥 MUST COME BEFORE "/:id" */
-router.get("/slug/:slug", getCourseBySlug);   // ✅ NEW ROUTE
+/* MUST COME BEFORE "/:id" */
+router.get("/slug/:slug", getCourseBySlug); 
 
 router.get("/:id", getCourseById);
 
