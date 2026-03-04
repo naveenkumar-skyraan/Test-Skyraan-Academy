@@ -17,7 +17,7 @@ export const getCourseLevels = async (req, res, next) => {
 
     // Public UI → only Active
     if (!all) {
-      sql += " AND status = 'Active'";
+      sql += " AND status = 'active'";
     }
 
     sql += " ORDER BY level_name ASC";

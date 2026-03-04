@@ -21,51 +21,98 @@ function deleteImageIfExists(imagePath) {
 }
 export async function getBlogs(req, res, next) {
   try {
-    const { category, tag, public: isPublic } = req.query;
+    const {
+      category,
+      tag,
+      public: isPublic,
+      page = 1,
+      limit = 6,
+      search = "",
+      sort = "newest",
+    } = req.query;
 
-    let query = `
-      SELECT 
-        b.*,
-        c.category_name,
-        t.tag_name
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const offset = (pageNumber - 1) * limitNumber;
+
+    let baseQuery = `
       FROM blogs b
-      LEFT JOIN blog_categories c 
+      ${isPublic === "true" ? "INNER JOIN" : "LEFT JOIN"} blog_categories c 
         ON b.category_id = c.id
-      LEFT JOIN blog_tags t 
+      ${isPublic === "true" ? "INNER JOIN" : "LEFT JOIN"} blog_tags t 
         ON b.tag_id = t.id
       WHERE b.deleted_at IS NULL
     `;
 
     const params = [];
 
-    // 🔥 SAME LOGIC AS COURSES
+    /* ================= PUBLIC MODE ================= */
     if (isPublic === "true") {
-      query += ` AND b.status = 'published'`;
+      baseQuery += `
+    AND LOWER(b.status) = 'published'
+  `;
     }
 
+    /* ================= CATEGORY FILTER ================= */
     if (category) {
-      const categoryArray = category.split(",");
-      query += ` AND b.category_id IN (${categoryArray.map(() => "?").join(",")})`;
+      const categoryArray = category.split(",").map(id => parseInt(id));
+      baseQuery += ` AND b.category_id IN (${categoryArray.map(() => "?").join(",")})`;
       params.push(...categoryArray);
     }
 
+    /* ================= TAG FILTER ================= */
     if (tag) {
-      const tagArray = tag.split(",");
-      query += ` AND b.tag_id IN (${tagArray.map(() => "?").join(",")})`;
+      const tagArray = tag.split(",").map(id => parseInt(id));
+      baseQuery += ` AND b.tag_id IN (${tagArray.map(() => "?").join(",")})`;
       params.push(...tagArray);
     }
 
-    query += ` ORDER BY b.created_at DESC`;
+    /* ================= SEARCH ================= */
+    if (search) {
+      baseQuery += ` AND b.title LIKE ?`;
+      params.push(`%${search}%`);
+    }
 
-    const [rows] = await db.query(query, params);
+    /* ================= SORT ================= */
+    let orderBy = ` ORDER BY b.created_at DESC`;
+    if (sort === "oldest") {
+      orderBy = ` ORDER BY b.created_at ASC`;
+    }
 
-    res.json({ success: true, data: rows });
+    /* ================= DATA QUERY ================= */
+    const dataQuery = `
+      SELECT 
+        b.*,
+        c.category_name,
+        t.tag_name
+      ${baseQuery}
+      ${orderBy}
+      LIMIT ? OFFSET ?
+    `;
+
+    const dataParams = [...params, limitNumber, offset];
+
+    /* ================= COUNT QUERY ================= */
+    const countQuery = `
+      SELECT COUNT(*) as total
+      ${baseQuery}
+    `;
+
+    const [rows] = await db.query(dataQuery, dataParams);
+    const [[countResult]] = await db.query(countQuery, params);
+
+    res.json({
+      success: true,
+      data: rows,
+      total: countResult.total,
+      page: pageNumber,
+      totalPages: Math.ceil(countResult.total / limitNumber),
+    });
+
   } catch (err) {
     next(err);
   }
 }
-
-
 
 
 /* =========================

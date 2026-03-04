@@ -9,60 +9,154 @@ export const getCourses = async (req, res, next) => {
   try {
     const isPublic = req.query.public === "true";
 
-    let query = `
-      SELECT
-        c.*,
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 8;
+    const offset = (page - 1) * limit;
 
-        cat.category_name,
-        cat.id AS category_id,
+    const search = req.query.search || "";
+    const sort = req.query.sort || "newest";
 
-        lvl.level_name,
-        lvl.id AS level_id,
+    const categoryFilter = req.query.category;
+    const levelFilter = req.query.level;
+    const durationFilter = req.query.duration;
 
-        dur.duration_label,
-        dur.id AS duration_id
-
+    let baseQuery = `
       FROM courses c
-      LEFT JOIN course_categories cat ON cat.id = c.category_id
-      LEFT JOIN course_levels lvl ON lvl.id = c.level_id
-      LEFT JOIN course_durations dur ON dur.id = c.duration_id
-
+      ${isPublic ? "INNER JOIN" : "LEFT JOIN"} course_categories cat ON cat.id = c.category_id
+      ${isPublic ? "INNER JOIN" : "LEFT JOIN"} course_levels lvl ON lvl.id = c.level_id
+      ${isPublic ? "INNER JOIN" : "LEFT JOIN"} course_durations dur ON dur.id = c.duration_id
       WHERE c.deleted_at IS NULL
     `;
 
     if (isPublic) {
-      query += `
-        AND c.status = 'published'
-        AND cat.status = 'Active'
-        AND lvl.status = 'Active'
-        AND dur.status = 'Active'
+      baseQuery += `
+        AND LOWER(c.status) = 'published'
+        AND LOWER(cat.status) = 'active'
+        AND LOWER(lvl.status) = 'active'
+        AND LOWER(dur.status) = 'active'
       `;
     }
 
-    query += ` ORDER BY c.created_at DESC`;
+    let conditions = [];
+    let values = [];
 
-    const [rows] = await db.query(query);
+    if (search) {
+      conditions.push(`c.title LIKE ?`);
+      values.push(`%${search}%`);
+    }
+
+    if (categoryFilter) {
+      const ids = categoryFilter.split(",").map(id => parseInt(id));
+      conditions.push(`c.category_id IN (${ids.map(() => "?").join(",")})`);
+      values.push(...ids);
+    }
+
+    if (levelFilter) {
+      const ids = levelFilter.split(",").map(id => parseInt(id));
+      conditions.push(`c.level_id IN (${ids.map(() => "?").join(",")})`);
+      values.push(...ids);
+    }
+
+    if (durationFilter) {
+      const ids = durationFilter.split(",").map(id => parseInt(id));
+      conditions.push(`c.duration_id IN (${ids.map(() => "?").join(",")})`);
+      values.push(...ids);
+    }
+
+    if (conditions.length) {
+      baseQuery += ` AND ` + conditions.join(" AND ");
+    }
+
+    let orderBy = ` ORDER BY c.created_at DESC `;
+    if (sort === "oldest") {
+      orderBy = ` ORDER BY c.created_at ASC `;
+    }
+
+    const dataQuery = `
+      SELECT
+        c.*,
+        cat.category_name,
+        lvl.level_name,
+        dur.duration_label
+      ${baseQuery}
+      ${orderBy}
+      LIMIT ? OFFSET ?
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*) as total
+      ${baseQuery}
+    `;
+
+    const dataParams = [...values, limit, offset];
+    const countParams = [...values];
+
+    const [rows] = await db.query(dataQuery, dataParams);
+    const [[countResult]] = await db.query(countQuery, countParams);
+
+    /* ================= STATIC COUNTS (PUBLIC ONLY) ================= */
+
+    let categoryCounts = [];
+    let levelCounts = [];
+    let durationCounts = [];
+
+    if (isPublic) {
+      [categoryCounts] = await db.query(`
+        SELECT cat.category_name, COUNT(*) as total
+        FROM courses c
+        INNER JOIN course_categories cat ON cat.id = c.category_id
+        WHERE c.deleted_at IS NULL
+        AND LOWER(c.status) = 'published'
+        AND LOWER(cat.status) = 'active'
+        GROUP BY c.category_id
+      `);
+
+      [levelCounts] = await db.query(`
+        SELECT lvl.level_name, COUNT(*) as total
+        FROM courses c
+        INNER JOIN course_levels lvl ON lvl.id = c.level_id
+        WHERE c.deleted_at IS NULL
+        AND LOWER(c.status) = 'published'
+        AND LOWER(lvl.status) = 'active'
+        GROUP BY c.level_id
+      `);
+
+      [durationCounts] = await db.query(`
+        SELECT dur.duration_label, COUNT(*) as total
+        FROM courses c
+        INNER JOIN course_durations dur ON dur.id = c.duration_id
+        WHERE c.deleted_at IS NULL
+        AND LOWER(c.status) = 'published'
+        AND LOWER(dur.status) = 'active'
+        GROUP BY c.duration_id
+      `);
+    }
 
     res.json({
       success: true,
       data: rows,
+      total: countResult.total,
+      page,
+      totalPages: Math.ceil(countResult.total / limit),
+      counts: {
+        category: categoryCounts,
+        level: levelCounts,
+        duration: durationCounts,
+      },
     });
+
   } catch (err) {
     next(err);
   }
 };
 
 /* =========================
-   GET SINGLE COURSE
+   GET SINGLE COURSE (ADMIN)
 ========================= */
 export const getCourseById = async (req, res, next) => {
   try {
     const [rows] = await db.query(
-      `
-      SELECT *
-      FROM courses
-      WHERE id = ? AND deleted_at IS NULL
-      `,
+      `SELECT * FROM courses WHERE id = ? AND deleted_at IS NULL`,
       [req.params.id]
     );
 
@@ -90,29 +184,23 @@ export const getCourseBySlug = async (req, res, next) => {
       `
       SELECT
         c.*,
-
         cat.category_name,
         cat.id AS category_id,
-
         lvl.level_name,
         lvl.id AS level_id,
-
         dur.duration_label,
         dur.id AS duration_id
-
       FROM courses c
-      LEFT JOIN course_categories cat ON cat.id = c.category_id
-      LEFT JOIN course_levels lvl ON lvl.id = c.level_id
-      LEFT JOIN course_durations dur ON dur.id = c.duration_id
-
+      INNER JOIN course_categories cat ON cat.id = c.category_id
+      INNER JOIN course_levels lvl ON lvl.id = c.level_id
+      INNER JOIN course_durations dur ON dur.id = c.duration_id
       WHERE
         c.slug = ?
         AND c.deleted_at IS NULL
-        AND c.status = 'published'
-        AND cat.status = 'Active'
-        AND lvl.status = 'Active'
-        AND dur.status = 'Active'
-
+        AND LOWER(c.status) = 'published'
+        AND LOWER(cat.status) = 'active'
+        AND LOWER(lvl.status) = 'active'
+        AND LOWER(dur.status) = 'active'
       LIMIT 1
       `,
       [slug]
@@ -125,17 +213,15 @@ export const getCourseBySlug = async (req, res, next) => {
       });
     }
 
-    res.json({
-      success: true,
-      data: rows[0],
-    });
+    res.json({ success: true, data: rows[0] });
+
   } catch (err) {
     next(err);
   }
 };
 
 /* =========================
-   🔥 UPLOAD COURSE THUMBNAIL
+   UPLOAD COURSE THUMBNAIL
 ========================= */
 export const uploadCourseThumbnail = async (req, res, next) => {
   try {
@@ -186,19 +272,10 @@ export const createCourse = async (req, res, next) => {
     await db.query(
       `
       INSERT INTO courses (
-        title,
-        slug,
-        short_description,
-        description,
-        thumbnail,
-        price,
-        category_id,
-        level_id,
-        duration_id,
-        discount,
-        is_featured,
-        popularity_score,
-        status
+        title, slug, short_description, description,
+        thumbnail, price, category_id, level_id,
+        duration_id, discount, is_featured,
+        popularity_score, status
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
@@ -220,6 +297,7 @@ export const createCourse = async (req, res, next) => {
     );
 
     res.status(201).json({ success: true });
+
   } catch (err) {
     next(err);
   }
@@ -249,7 +327,6 @@ export const updateCourse = async (req, res, next) => {
     const normalizedStatus =
       status === "published" ? "published" : "draft";
 
-    /* 🔥 FETCH OLD THUMBNAIL */
     const [[existing]] = await db.query(
       `SELECT thumbnail FROM courses WHERE id = ? AND deleted_at IS NULL`,
       [req.params.id]
@@ -259,17 +336,12 @@ export const updateCourse = async (req, res, next) => {
       ? `/uploads/courses/${req.file.filename}`
       : thumbnail;
 
-    /* 🔥 DELETE OLD IMAGE IF NEW ONE UPLOADED */
     if (
       req.file &&
       existing?.thumbnail &&
       existing.thumbnail !== newThumbnailPath
     ) {
-      const oldFilePath = path.join(
-        process.cwd(),
-        existing.thumbnail
-      );
-
+      const oldFilePath = path.join(process.cwd(), existing.thumbnail);
       if (fs.existsSync(oldFilePath)) {
         fs.unlinkSync(oldFilePath);
       }
@@ -278,20 +350,10 @@ export const updateCourse = async (req, res, next) => {
     await db.query(
       `
       UPDATE courses SET
-        title = ?,
-        slug = ?,
-        short_description = ?,
-        description = ?,
-        thumbnail = ?,
-        price = ?,
-        category_id = ?,
-        level_id = ?,
-        duration_id = ?,
-        discount = ?,
-        is_featured = ?,
-        popularity_score = ?,
-        status = ?,
-        updated_at = CURRENT_TIMESTAMP
+        title = ?, slug = ?, short_description = ?, description = ?,
+        thumbnail = ?, price = ?, category_id = ?, level_id = ?,
+        duration_id = ?, discount = ?, is_featured = ?,
+        popularity_score = ?, status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND deleted_at IS NULL
       `,
       [
@@ -313,22 +375,22 @@ export const updateCourse = async (req, res, next) => {
     );
 
     res.json({ success: true });
+
   } catch (err) {
     next(err);
   }
 };
+
 /* =========================
-   DELETE COURSE
+   DELETE COURSE (SOFT)
 ========================= */
 export const deleteCourse = async (req, res, next) => {
   try {
-    /* 🔥 FETCH EXISTING THUMBNAIL */
     const [[existing]] = await db.query(
       `SELECT thumbnail FROM courses WHERE id = ? AND deleted_at IS NULL`,
       [req.params.id]
     );
 
-    /* 🔥 SOFT DELETE COURSE */
     await db.query(
       `
       UPDATE courses
@@ -339,16 +401,15 @@ export const deleteCourse = async (req, res, next) => {
       [req.params.id]
     );
 
-    /* 🔥 DELETE IMAGE FILE (IF EXISTS) */
     if (existing?.thumbnail) {
       const filePath = path.join(process.cwd(), existing.thumbnail);
-
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     }
 
     res.json({ success: true });
+
   } catch (err) {
     next(err);
   }
@@ -372,6 +433,7 @@ export const toggleCourseStatus = async (req, res, next) => {
     );
 
     res.json({ success: true });
+
   } catch (err) {
     next(err);
   }
