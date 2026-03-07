@@ -19,6 +19,7 @@ import blogsRoutes from "./routes/blogsRoutes.js";
 import blogCategoriesRoutes from "./routes/blogCategoriesRoutes.js";
 import blogTagsRoutes from "./routes/blogTagsRoutes.js";
 import enquiryRoutes from "./routes/enquiryRoutes.js"; 
+import sitemapRoute from "./routes/sitemap.js";
 
 import errorHandler from "./middlewares/errorHandler.js";
 
@@ -53,6 +54,7 @@ app.use("/api/blog-categories", blogCategoriesRoutes);
 app.use("/api/blog-tags", blogTagsRoutes);
 
 app.use("/api/contact", enquiryRoutes);
+app.use("/", sitemapRoute);
 
 /* ================= ERROR HANDLER ================= */
 app.use(errorHandler);
