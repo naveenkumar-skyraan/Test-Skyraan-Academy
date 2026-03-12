@@ -48,7 +48,7 @@ app.use("/api/course-levels", courseLevelsRoutes);
 app.use("/api/course-durations", courseDurationsRoutes);
 app.use("/api/course-modules", courseModulesRoutes);
 app.use("/api/module-lessons", moduleLessonsRoutes);
-app.use("/api/lesson-media", lessonMediaRoutes);
+app.use("/api/lesson-media", lessonMediaRoutes);  
 app.use("/api/blogs", blogsRoutes);
 app.use("/api/blog-categories", blogCategoriesRoutes);
 app.use("/api/blog-tags", blogTagsRoutes);

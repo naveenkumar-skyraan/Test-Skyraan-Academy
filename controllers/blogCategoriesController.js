@@ -5,12 +5,21 @@ import db from "../db.js";
 ========================= */
 export const getBlogCategories = async (req, res, next) => {
   try {
-    const [rows] = await db.query(`
+    const { all } = req.query;
+
+    let sql = `
       SELECT id, category_name, status
       FROM blog_categories
       WHERE deleted_at IS NULL
-      ORDER BY category_name ASC
-    `);
+    `;
+
+    if (!all) {
+      sql += " AND status = 'Active'";
+    }
+
+    sql += " ORDER BY category_name ASC";
+
+    const [rows] = await db.query(sql);
 
     res.json({ success: true, data: rows });
   } catch (err) {

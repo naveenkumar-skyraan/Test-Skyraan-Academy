@@ -5,19 +5,27 @@ import db from "../db.js";
 ========================= */
 export const getBlogTags = async (req, res, next) => {
   try {
-    const [rows] = await db.query(`
+    const { all } = req.query;
+
+    let sql = `
       SELECT id, tag_name, status
       FROM blog_tags
       WHERE deleted_at IS NULL
-      ORDER BY tag_name ASC
-    `);
+    `;
+
+    if (!all) {
+      sql += " AND status = 'Active'";
+    }
+
+    sql += " ORDER BY tag_name ASC";
+
+    const [rows] = await db.query(sql);
 
     res.json({ success: true, data: rows });
   } catch (err) {
     next(err);
   }
 };
-
 
 
 export const getBlogTagById = async (req, res, next) => {

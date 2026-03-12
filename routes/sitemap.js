@@ -12,7 +12,7 @@ const baseUrl =
 // =========================
 // MAIN SITEMAP
 // =========================
-router.get("/sitemap.xml", (req, res) => {
+router.get("/static.xml", (req, res) => {
     
   const staticPages = [
     {
