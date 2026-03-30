@@ -39,6 +39,16 @@ app.use(
   express.static(path.join(__dirname, "uploads"))
 );
 
+/* ================= LEGAL FILE ROUTES ================= */
+app.get("/privacy-policy", (req, res) => {
+  res.sendFile(path.join(__dirname, "privacy-policies-skyraanacademy.html"));
+});
+
+app.get("/terms-of-use", (req, res) => {
+  res.sendFile(path.join(__dirname, "terms-use-skyraanacademy.html"));
+});
+
+
 /* ================= API ROUTES ================= */
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/dashboard", dashboardRoutes);
