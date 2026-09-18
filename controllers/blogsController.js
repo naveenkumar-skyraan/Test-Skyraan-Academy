@@ -145,6 +145,46 @@ export async function getBlogById(req, res, next) {
   }
 }
 
+/* =========================
+   GET BLOG BY SLUG
+========================= */
+export async function getBlogBySlug(req, res, next) {
+  try {
+    const [rows] = await db.query(
+      `
+      SELECT
+        b.*,
+        c.category_name,
+        t.tag_name
+      FROM blogs b
+      LEFT JOIN blog_categories c
+        ON b.category_id = c.id
+      LEFT JOIN blog_tags t
+        ON b.tag_id = t.id
+      WHERE b.slug = ?
+        AND b.deleted_at IS NULL
+        AND LOWER(b.status) = 'published'
+      LIMIT 1
+      `,
+      [req.params.slug]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Blog not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: rows[0],
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 
 
 /* =========================

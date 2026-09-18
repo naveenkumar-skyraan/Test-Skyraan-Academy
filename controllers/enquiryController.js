@@ -1,7 +1,19 @@
 import nodemailer from "nodemailer";
 import db from "../db.js";
 
-/* ================= CREATE ENQUIRY ================= */
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    service:"smtp",
+    host: process.env.SMTP_HOST,          
+    port: Number(process.env.SMTP_PORT), 
+    secure: process.env.EMAIL_SECURE === "true",
+    auth: {
+      user: process.env.EMAIL_USER,       
+      pass: process.env.EMAIL_PASS,  
+    }
+  });
+};
+
 export const sendEnquiry = async (req, res) => {
   try {
     const { name, email, message, course_name, type } = req.body;
@@ -13,15 +25,18 @@ export const sendEnquiry = async (req, res) => {
       });
     }
 
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|in|co|org|edu|net|co\.in)$/i;
+    const emailRegex =
+      /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|in|co|org|edu|net|co\.in)$/i;
 
-    const domain = email.split("@")[1]?.toLowerCase();const fakeDomains = [
-  "gamil.com",
-  "gmial.com",
-  "hotmail.co",
-  "outlok.com",
-  "yaho.com"
-];
+    const domain = email.split("@")[1]?.toLowerCase();
+
+    const fakeDomains = [
+      "gamil.com",
+      "gmial.com",
+      "hotmail.co",
+      "outlok.com",
+      "yaho.com",
+    ];
 
     if (!emailRegex.test(email) || fakeDomains.includes(domain)) {
       return res.status(400).json({
@@ -30,35 +45,24 @@ export const sendEnquiry = async (req, res) => {
       });
     }
 
-    /* ================= NODEMAILER SETUP ================= */
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: process.env.SMTP_PORT == 465,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+    const transporter = createTransporter();
 
     await transporter.verify();
 
-    /* ================= ADMIN EMAIL ================= */
     await transporter.sendMail({
-      from: `"Skyraan Academy Website" <${process.env.EMAIL_USER}>`,
-      to: process.env.EMAIL_USER,
-      replyTo: email,
-      subject: `New ${type === "course" ? "Course Enquiry" : "Contact Message"
-        } from ${name}`,
+      service:"smtp",
+      from: `"Skyraan Academy Website" <${process.env.ADMIN_EMAIL}>`,
+      to: process.env.ADMIN_EMAIL,
+      replyTo: email, 
+      subject: `New ${
+        type === "course" ? "Course Enquiry" : "Contact Message"
+      } from ${name}`,
       html: `
         <div style="font-family:Arial,sans-serif;padding:20px;">
           <h2 style="color:#1e3a8a;">New Website Enquiry</h2>
           <p><strong>Name:</strong> ${name}</p>
           <p><strong>Email:</strong> ${email}</p>
-          ${course_name
-          ? `<p><strong>Course:</strong> ${course_name}</p>`
-          : ""
-        }
+          ${course_name ? `<p><strong>Course:</strong> ${course_name}</p>` : ""}
           <p><strong>Message:</strong></p>
           <div style="background:#f3f4f6;padding:15px;border-radius:8px;">
             ${message.replace(/\n/g, "<br/>")}
@@ -67,41 +71,41 @@ export const sendEnquiry = async (req, res) => {
       `,
     });
 
-    /* ================= AUTO REPLY ================= */
     try {
       await transporter.sendMail({
-        from: `"Skyraan Academy" <${process.env.EMAIL_USER}>`,
+        service:"smtp",
+        from: `"Skyraan Academy" <${process.env.ADMIN_EMAIL}>`,
         to: email,
-        subject: "We received your enquiry",
+        subject: "We received your enquiry – Skyraan Academy",
         html: `
-      <div style="font-family:Arial,sans-serif;padding:20px;">
-        <h2 style="color:#1e3a8a;">Hello ${name},</h2>
-        <p>Thank you for contacting <strong>Skyraan Academy</strong>.</p>
-        ${course_name
-            ? `<p>We have received your enquiry regarding <strong>${course_name}</strong>.</p>`
-            : `<p>We have received your message.</p>`
-          }
-        <p>Our team will get back to you shortly.</p>
-        <br/>
-        <p>Best Regards,<br/>Skyraan Academy Team</p>
-      </div>
-    `,
+          <div style="font-family:Arial,sans-serif;padding:20px;">
+            <h2 style="color:#1e3a8a;">Hello ${name},</h2>
+            <p>Thank you for contacting <strong>Skyraan Academy</strong>.</p>
+            ${
+              course_name
+                ? `<p>We have received your enquiry regarding <strong>${course_name}</strong>.</p>`
+                : `<p>We have received your message.</p>`
+            }
+            <p>Our team will get back to you shortly.</p>
+            <br/>
+            <p>Best Regards,<br/>Skyraan Academy Team</p>
+          </div>
+        `,
       });
     } catch (mailError) {
-      if(mailError.responseCode === 550 ){
-         return res.status(400).json({
+
+      if (mailError.responseCode === 550) {
+        return res.status(400).json({
           success: false,
-          message: "Please enter a valid email",
+          message: "Please enter a valid email address",
         });
       }
-      else{
-      
-      console.error("Auto reply failed:", mailError);
-        return res.status(500).json({success:false,message:"server error"})
-      }
+      console.error("Auto-reply failed:", mailError.message);
+      return res
+        .status(500)
+        .json({ success: false, message: "Server error sending auto-reply" });
     }
 
- /* ================= SAVE TO DATABASE ================= */
     await db.query(
       `INSERT INTO enquiries 
        (name, email, message, course_name, type, status) 
@@ -129,7 +133,6 @@ export const sendEnquiry = async (req, res) => {
   }
 };
 
-/* ================= GET ALL ENQUIRIES ================= */
 export const getAllEnquiries = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -151,7 +154,6 @@ export const getAllEnquiries = async (req, res) => {
   }
 };
 
-/* ================= MARK AS VIEWED ================= */
 export const markEnquiryViewed = async (req, res) => {
   try {
     const { id } = req.params;
@@ -170,7 +172,6 @@ export const markEnquiryViewed = async (req, res) => {
   }
 };
 
-/* ================= SOFT DELETE ================= */
 export const deleteEnquiry = async (req, res) => {
   try {
     const { id } = req.params;

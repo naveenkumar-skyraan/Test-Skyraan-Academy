@@ -1,10 +1,6 @@
 import db from "../db.js";
 
-/* =========================
-   GET ALL CATEGORIES
-   Admin → all (except deleted)
-   Public → Active only
-========================= */
+
 export const getCourseCategories = async (req, res, next) => {
   try {
     const { all } = req.query;
@@ -15,12 +11,10 @@ export const getCourseCategories = async (req, res, next) => {
       WHERE deleted_at IS NULL
     `;
 
-    // Public UI → only Active
     if (!all) {
       sql += " AND status = 'Active'";
     }
 
-    // 🔥 FIX: newest first (no reordering on toggle)
     sql += " ORDER BY created_at DESC";
 
     const [rows] = await db.query(sql);
@@ -30,9 +24,7 @@ export const getCourseCategories = async (req, res, next) => {
   }
 };
 
-/* =========================
-   GET SINGLE CATEGORY (ADMIN)
-========================= */
+
 export const getCourseCategoryById = async (req, res, next) => {
   try {
     const [rows] = await db.query(
@@ -58,9 +50,6 @@ export const getCourseCategoryById = async (req, res, next) => {
   }
 };
 
-/* =========================
-   CREATE CATEGORY (ADMIN)
-========================= */
 export const createCourseCategory = async (req, res, next) => {
   try {
     const { category_name, status } = req.body;
@@ -90,9 +79,7 @@ export const createCourseCategory = async (req, res, next) => {
   }
 };
 
-/* =========================
-   UPDATE CATEGORY (ADMIN)
-========================= */
+
 export const updateCourseCategory = async (req, res, next) => {
   try {
     const { category_name, status } = req.body;
@@ -116,9 +103,7 @@ export const updateCourseCategory = async (req, res, next) => {
   }
 };
 
-/* =========================
-   SOFT DELETE CATEGORY (ADMIN)
-========================= */
+
 export const deleteCourseCategory = async (req, res, next) => {
   try {
     await db.query(

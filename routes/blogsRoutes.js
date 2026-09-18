@@ -3,6 +3,7 @@ import uploadBlogImage from "../middlewares/uploadBlogImage.js";
 import {
   getBlogs,
   getBlogById,
+  getBlogBySlug,
   createBlog,
   updateBlog,
   deleteBlog,
@@ -12,6 +13,7 @@ import {
 const router = express.Router();
 
 router.get("/", getBlogs);
+router.get("/slug/:slug", getBlogBySlug);
 router.get("/:id", getBlogById);
 router.post("/", createBlog);
 router.put("/:id", updateBlog);

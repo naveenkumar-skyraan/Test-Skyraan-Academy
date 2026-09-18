@@ -2,9 +2,7 @@ import db from "../db.js";
 import fs from "fs";
 import path from "path";
 
-/* =========================
-   GET ALL COURSES (ADMIN / PUBLIC)
-========================= */
+
 export const getCourses = async (req, res, next) => {
   try {
     const isPublic = req.query.public === "true";
@@ -68,7 +66,14 @@ export const getCourses = async (req, res, next) => {
     }
 
     let orderBy = ` ORDER BY c.created_at DESC `;
-    if (sort === "oldest") {
+
+    if (sort === "popular") {
+      orderBy = `
+    ORDER BY
+      CAST(COALESCE(c.popularity_score, 0) AS UNSIGNED) DESC,
+      c.created_at DESC
+  `;
+    } else if (sort === "oldest") {
       orderBy = ` ORDER BY c.created_at ASC `;
     }
 
@@ -94,7 +99,6 @@ export const getCourses = async (req, res, next) => {
     const [rows] = await db.query(dataQuery, dataParams);
     const [[countResult]] = await db.query(countQuery, countParams);
 
-    /* ================= STATIC COUNTS (PUBLIC ONLY) ================= */
 
     let categoryCounts = [];
     let levelCounts = [];
@@ -150,9 +154,6 @@ export const getCourses = async (req, res, next) => {
   }
 };
 
-/* =========================
-   GET SINGLE COURSE (ADMIN)
-========================= */
 export const getCourseById = async (req, res, next) => {
   try {
     const [rows] = await db.query(
@@ -173,9 +174,6 @@ export const getCourseById = async (req, res, next) => {
   }
 };
 
-/* =========================
-   GET COURSE BY SLUG (PUBLIC)
-========================= */
 export const getCourseBySlug = async (req, res, next) => {
   try {
     const { slug } = req.params;
@@ -220,9 +218,7 @@ export const getCourseBySlug = async (req, res, next) => {
   }
 };
 
-/* =========================
-   UPLOAD COURSE THUMBNAIL
-========================= */
+
 export const uploadCourseThumbnail = async (req, res, next) => {
   try {
     if (!req.file) {
@@ -241,9 +237,6 @@ export const uploadCourseThumbnail = async (req, res, next) => {
   }
 };
 
-/* =========================
-   CREATE COURSE
-========================= */
 export const createCourse = async (req, res, next) => {
   try {
     const {
@@ -303,9 +296,6 @@ export const createCourse = async (req, res, next) => {
   }
 };
 
-/* =========================
-   UPDATE COURSE
-========================= */
 export const updateCourse = async (req, res, next) => {
   try {
     const {
@@ -381,9 +371,6 @@ export const updateCourse = async (req, res, next) => {
   }
 };
 
-/* =========================
-   DELETE COURSE (SOFT)
-========================= */
 export const deleteCourse = async (req, res, next) => {
   try {
     const [[existing]] = await db.query(
@@ -415,9 +402,6 @@ export const deleteCourse = async (req, res, next) => {
   }
 };
 
-/* =========================
-   TOGGLE COURSE STATUS
-========================= */
 export const toggleCourseStatus = async (req, res, next) => {
   try {
     const normalizedStatus =

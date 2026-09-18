@@ -1,19 +1,16 @@
 import express from "express";
 import db from "../db.js";
 
+import dotenv from "dotenv";
+
+dotenv.config();
+
+
 const router = express.Router();
 
-const baseUrl =
-  process.env.NODE_ENV === "production"
-    ? "https://skyraanacademy.com"
-    : "http://localhost:5173";
+const baseUrl = process.env.API_BASE_SITEMAP;
 
-
-// =========================
-// MAIN SITEMAP
-// =========================
 router.get("/static.xml", (req, res) => {
-    
   const staticPages = [
     {
       url: "/",
@@ -62,10 +59,6 @@ router.get("/static.xml", (req, res) => {
   res.send(xml);
 });
 
-
-// =========================
-// COURSES XML
-// =========================
 router.get("/courses.xml", async (req, res) => {
   try {
     const [courses] = await db.query(
@@ -76,7 +69,7 @@ router.get("/courses.xml", async (req, res) => {
     xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`;
 
     courses.forEach((course) => {
-      xml += `
+      xml += `s
         <url>
           <loc>${baseUrl}/courses/${encodeURIComponent(course.slug)}</loc>
           <lastmod>${new Date(course.updated_at).toISOString()}</lastmod>
@@ -89,17 +82,12 @@ router.get("/courses.xml", async (req, res) => {
 
     res.header("Content-Type", "application/xml");
     res.send(xml);
-
   } catch (error) {
     console.error(error);
     res.status(500).send("Error generating courses sitemap");
   }
 });
 
-
-// =========================
-// BLOGS XML
-// =========================
 router.get("/blogs.xml", async (req, res) => {
   try {
     const [blogs] = await db.query(
@@ -123,7 +111,6 @@ router.get("/blogs.xml", async (req, res) => {
 
     res.header("Content-Type", "application/xml");
     res.send(xml);
-
   } catch (error) {
     console.error(error);
     res.status(500).send("Error generating blogs sitemap");
