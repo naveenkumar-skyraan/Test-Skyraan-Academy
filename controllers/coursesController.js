@@ -15,24 +15,21 @@ export const getCourses = async (req, res, next) => {
     const sort = req.query.sort || "newest";
 
     const categoryFilter = req.query.category;
-    const levelFilter = req.query.level;
     const durationFilter = req.query.duration;
 
     let baseQuery = `
-      FROM courses c
-      ${isPublic ? "INNER JOIN" : "LEFT JOIN"} course_categories cat ON cat.id = c.category_id
-      ${isPublic ? "INNER JOIN" : "LEFT JOIN"} course_levels lvl ON lvl.id = c.level_id
-      ${isPublic ? "INNER JOIN" : "LEFT JOIN"} course_durations dur ON dur.id = c.duration_id
-      WHERE c.deleted_at IS NULL
-    `;
+  FROM courses c
+  ${isPublic ? "INNER JOIN" : "LEFT JOIN"} course_categories cat ON cat.id = c.category_id
+  ${isPublic ? "INNER JOIN" : "LEFT JOIN"} course_durations dur ON dur.id = c.duration_id
+  WHERE c.deleted_at IS NULL
+`;
 
     if (isPublic) {
       baseQuery += `
-        AND LOWER(c.status) = 'published'
-        AND LOWER(cat.status) = 'active'
-        AND LOWER(lvl.status) = 'active'
-        AND LOWER(dur.status) = 'active'
-      `;
+    AND LOWER(c.status) = 'published'
+    AND LOWER(cat.status) = 'active'
+    AND LOWER(dur.status) = 'active'
+  `;
     }
 
     let conditions = [];
@@ -46,12 +43,6 @@ export const getCourses = async (req, res, next) => {
     if (categoryFilter) {
       const ids = categoryFilter.split(",").map(id => parseInt(id));
       conditions.push(`c.category_id IN (${ids.map(() => "?").join(",")})`);
-      values.push(...ids);
-    }
-
-    if (levelFilter) {
-      const ids = levelFilter.split(",").map(id => parseInt(id));
-      conditions.push(`c.level_id IN (${ids.map(() => "?").join(",")})`);
       values.push(...ids);
     }
 
@@ -81,7 +72,6 @@ export const getCourses = async (req, res, next) => {
       SELECT
         c.*,
         cat.category_name,
-        lvl.level_name,
         dur.duration_label
       ${baseQuery}
       ${orderBy}
@@ -101,39 +91,28 @@ export const getCourses = async (req, res, next) => {
 
 
     let categoryCounts = [];
-    let levelCounts = [];
     let durationCounts = [];
 
     if (isPublic) {
       [categoryCounts] = await db.query(`
-        SELECT cat.category_name, COUNT(*) as total
-        FROM courses c
-        INNER JOIN course_categories cat ON cat.id = c.category_id
-        WHERE c.deleted_at IS NULL
-        AND LOWER(c.status) = 'published'
-        AND LOWER(cat.status) = 'active'
-        GROUP BY c.category_id
-      `);
-
-      [levelCounts] = await db.query(`
-        SELECT lvl.level_name, COUNT(*) as total
-        FROM courses c
-        INNER JOIN course_levels lvl ON lvl.id = c.level_id
-        WHERE c.deleted_at IS NULL
-        AND LOWER(c.status) = 'published'
-        AND LOWER(lvl.status) = 'active'
-        GROUP BY c.level_id
-      `);
+    SELECT cat.category_name, COUNT(*) as total
+    FROM courses c
+    INNER JOIN course_categories cat ON cat.id = c.category_id
+    WHERE c.deleted_at IS NULL
+    AND LOWER(c.status) = 'published'
+    AND LOWER(cat.status) = 'active'
+    GROUP BY c.category_id
+  `);
 
       [durationCounts] = await db.query(`
-        SELECT dur.duration_label, COUNT(*) as total
-        FROM courses c
-        INNER JOIN course_durations dur ON dur.id = c.duration_id
-        WHERE c.deleted_at IS NULL
-        AND LOWER(c.status) = 'published'
-        AND LOWER(dur.status) = 'active'
-        GROUP BY c.duration_id
-      `);
+    SELECT dur.duration_label, COUNT(*) as total
+    FROM courses c
+    INNER JOIN course_durations dur ON dur.id = c.duration_id
+    WHERE c.deleted_at IS NULL
+    AND LOWER(c.status) = 'published'
+    AND LOWER(dur.status) = 'active'
+    GROUP BY c.duration_id
+  `);
     }
 
     res.json({
@@ -144,7 +123,6 @@ export const getCourses = async (req, res, next) => {
       totalPages: Math.ceil(countResult.total / limit),
       counts: {
         category: categoryCounts,
-        level: levelCounts,
         duration: durationCounts,
       },
     });
@@ -180,27 +158,23 @@ export const getCourseBySlug = async (req, res, next) => {
 
     const [rows] = await db.query(
       `
-      SELECT
-        c.*,
-        cat.category_name,
-        cat.id AS category_id,
-        lvl.level_name,
-        lvl.id AS level_id,
-        dur.duration_label,
-        dur.id AS duration_id
-      FROM courses c
-      INNER JOIN course_categories cat ON cat.id = c.category_id
-      INNER JOIN course_levels lvl ON lvl.id = c.level_id
-      INNER JOIN course_durations dur ON dur.id = c.duration_id
-      WHERE
-        c.slug = ?
-        AND c.deleted_at IS NULL
-        AND LOWER(c.status) = 'published'
-        AND LOWER(cat.status) = 'active'
-        AND LOWER(lvl.status) = 'active'
-        AND LOWER(dur.status) = 'active'
-      LIMIT 1
-      `,
+    SELECT
+      c.*,
+      cat.category_name,
+      cat.id AS category_id,
+      dur.duration_label,
+      dur.id AS duration_id
+    FROM courses c
+    INNER JOIN course_categories cat ON cat.id = c.category_id
+    INNER JOIN course_durations dur ON dur.id = c.duration_id
+    WHERE
+      c.slug = ?
+      AND c.deleted_at IS NULL
+      AND LOWER(c.status) = 'published'
+      AND LOWER(cat.status) = 'active'
+      AND LOWER(dur.status) = 'active'
+    LIMIT 1
+  `,
       [slug]
     );
 
