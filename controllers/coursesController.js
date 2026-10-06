@@ -2,10 +2,30 @@ import db from "../db.js";
 import fs from "fs";
 import path from "path";
 
-
 export const getCourses = async (req, res, next) => {
   try {
     const isPublic = req.query.public === "true";
+
+    const suggestions = req.query.suggestions === "true";
+
+    if (isPublic && suggestions) {
+      const [rows] = await db.query(`
+    SELECT c.id, c.title
+    FROM courses c
+    INNER JOIN course_categories cat ON cat.id = c.category_id
+    INNER JOIN course_durations dur ON dur.id = c.duration_id
+    WHERE c.deleted_at IS NULL
+      AND LOWER(c.status) = 'published'
+      AND LOWER(cat.status) = 'active'
+      AND LOWER(dur.status) = 'active'
+    ORDER BY c.title ASC
+  `);
+
+      return res.json({
+        success: true,
+        data: rows,
+      });
+    }
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 8;
@@ -41,13 +61,13 @@ export const getCourses = async (req, res, next) => {
     }
 
     if (categoryFilter) {
-      const ids = categoryFilter.split(",").map(id => parseInt(id));
+      const ids = categoryFilter.split(",").map((id) => parseInt(id));
       conditions.push(`c.category_id IN (${ids.map(() => "?").join(",")})`);
       values.push(...ids);
     }
 
     if (durationFilter) {
-      const ids = durationFilter.split(",").map(id => parseInt(id));
+      const ids = durationFilter.split(",").map((id) => parseInt(id));
       conditions.push(`c.duration_id IN (${ids.map(() => "?").join(",")})`);
       values.push(...ids);
     }
@@ -89,7 +109,6 @@ export const getCourses = async (req, res, next) => {
     const [rows] = await db.query(dataQuery, dataParams);
     const [[countResult]] = await db.query(countQuery, countParams);
 
-
     let categoryCounts = [];
     let durationCounts = [];
 
@@ -126,7 +145,6 @@ export const getCourses = async (req, res, next) => {
         duration: durationCounts,
       },
     });
-
   } catch (err) {
     next(err);
   }
@@ -136,7 +154,7 @@ export const getCourseById = async (req, res, next) => {
   try {
     const [rows] = await db.query(
       `SELECT * FROM courses WHERE id = ? AND deleted_at IS NULL`,
-      [req.params.id]
+      [req.params.id],
     );
 
     if (!rows.length) {
@@ -175,7 +193,7 @@ export const getCourseBySlug = async (req, res, next) => {
       AND LOWER(dur.status) = 'active'
     LIMIT 1
   `,
-      [slug]
+      [slug],
     );
 
     if (!rows.length) {
@@ -186,12 +204,10 @@ export const getCourseBySlug = async (req, res, next) => {
     }
 
     res.json({ success: true, data: rows[0] });
-
   } catch (err) {
     next(err);
   }
 };
-
 
 export const uploadCourseThumbnail = async (req, res, next) => {
   try {
@@ -229,8 +245,7 @@ export const createCourse = async (req, res, next) => {
       status,
     } = req.body;
 
-    const normalizedStatus =
-      status === "published" ? "published" : "draft";
+    const normalizedStatus = status === "published" ? "published" : "draft";
 
     const thumbnailPath = req.file
       ? `/uploads/courses/${req.file.filename}`
@@ -260,11 +275,10 @@ export const createCourse = async (req, res, next) => {
         is_featured ?? 0,
         popularity_score ?? 0,
         normalizedStatus,
-      ]
+      ],
     );
 
     res.status(201).json({ success: true });
-
   } catch (err) {
     next(err);
   }
@@ -288,12 +302,11 @@ export const updateCourse = async (req, res, next) => {
       status,
     } = req.body;
 
-    const normalizedStatus =
-      status === "published" ? "published" : "draft";
+    const normalizedStatus = status === "published" ? "published" : "draft";
 
     const [[existing]] = await db.query(
       `SELECT thumbnail FROM courses WHERE id = ? AND deleted_at IS NULL`,
-      [req.params.id]
+      [req.params.id],
     );
 
     const newThumbnailPath = req.file
@@ -335,11 +348,10 @@ export const updateCourse = async (req, res, next) => {
         popularity_score,
         normalizedStatus,
         req.params.id,
-      ]
+      ],
     );
 
     res.json({ success: true });
-
   } catch (err) {
     next(err);
   }
@@ -349,7 +361,7 @@ export const deleteCourse = async (req, res, next) => {
   try {
     const [[existing]] = await db.query(
       `SELECT thumbnail FROM courses WHERE id = ? AND deleted_at IS NULL`,
-      [req.params.id]
+      [req.params.id],
     );
 
     await db.query(
@@ -359,7 +371,7 @@ export const deleteCourse = async (req, res, next) => {
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND deleted_at IS NULL
       `,
-      [req.params.id]
+      [req.params.id],
     );
 
     if (existing?.thumbnail) {
@@ -370,7 +382,6 @@ export const deleteCourse = async (req, res, next) => {
     }
 
     res.json({ success: true });
-
   } catch (err) {
     next(err);
   }
@@ -387,11 +398,10 @@ export const toggleCourseStatus = async (req, res, next) => {
       SET status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND deleted_at IS NULL
       `,
-      [normalizedStatus, req.params.id]
+      [normalizedStatus, req.params.id],
     );
 
     res.json({ success: true });
-
   } catch (err) {
     next(err);
   }

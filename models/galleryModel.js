@@ -1,4 +1,3 @@
-
 import db from "../db.js";
 
 export const getGallerySections = async (includeInactive = false) => {
@@ -201,33 +200,163 @@ export const createGalleryItem = async ({
   title = null,
   media_type,
   media_path,
-  sort_order = 0,
   status = "active",
 }) => {
-  const [result] = await db.query(
-    `
-      INSERT INTO gallery_items
-        (
-          section_id,
-          title,
-          media_type,
-          media_path,
-          sort_order,
-          status
-        )
-      VALUES (?, ?, ?, ?, ?, ?)
-    `,
-    [
-      section_id,
-      title,
-      media_type,
-      media_path,
-      sort_order,
-      status,
-    ]
+  const connection = await db.getConnection();
+
+  let insertedId;
+
+  try {
+    await connection.beginTransaction();
+
+    const [sections] = await connection.query(
+      `
+        SELECT id
+        FROM gallery_sections
+        WHERE id = ?
+        FOR UPDATE
+      `,
+      [section_id]
+    );
+
+    if (sections.length === 0) {
+      throw new Error("Gallery section not found");
+    }
+
+    const [rows] = await connection.query(
+      `
+        SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order
+        FROM gallery_items
+        WHERE section_id = ?
+      `,
+      [section_id]
+    );
+
+    const sortOrder = Number(rows[0].max_sort_order) + 1;
+
+    const [result] = await connection.query(
+      `
+        INSERT INTO gallery_items
+          (
+            section_id,
+            title,
+            media_type,
+            media_path,
+            sort_order,
+            status
+          )
+        VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      [
+        section_id,
+        title,
+        media_type,
+        media_path,
+        sortOrder,
+        status,
+      ]
+    );
+
+    insertedId = result.insertId;
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  return getGalleryItemById(insertedId);
+};
+
+export const createGalleryItemsBulk = async (items) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error("At least one gallery item is required");
+  }
+
+  const sectionId = Number(items[0].section_id);
+
+  if (!Number.isInteger(sectionId) || sectionId <= 0) {
+    throw new Error("Valid section is required");
+  }
+
+  if (items.some((item) => Number(item.section_id) !== sectionId)) {
+    throw new Error("All gallery items must belong to the same section");
+  }
+
+  const connection = await db.getConnection();
+  const insertedIds = [];
+
+  try {
+    await connection.beginTransaction();
+
+    const [sections] = await connection.query(
+      `
+        SELECT id
+        FROM gallery_sections
+        WHERE id = ?
+        FOR UPDATE
+      `,
+      [sectionId]
+    );
+
+    if (sections.length === 0) {
+      throw new Error("Gallery section not found");
+    }
+
+    const [rows] = await connection.query(
+      `
+        SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order
+        FROM gallery_items
+        WHERE section_id = ?
+      `,
+      [sectionId]
+    );
+
+    let nextSortOrder = Number(rows[0].max_sort_order) + 1;
+
+    for (const item of items) {
+      const [result] = await connection.query(
+        `
+          INSERT INTO gallery_items
+            (
+              section_id,
+              title,
+              media_type,
+              media_path,
+              sort_order,
+              status
+            )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          item.section_id,
+          item.title ?? null,
+          item.media_type,
+          item.media_path,
+          nextSortOrder,
+          item.status ?? "active",
+        ]
+      );
+
+      insertedIds.push(result.insertId);
+      nextSortOrder += 1;
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  const insertedItems = await Promise.all(
+    insertedIds.map((id) => getGalleryItemById(id))
   );
 
-  return getGalleryItemById(result.insertId);
+  return insertedItems;
 };
 
 export const updateGalleryItem = async (

@@ -3,14 +3,13 @@ import db from "../db.js";
 
 const createTransporter = () => {
   return nodemailer.createTransport({
-    service:"smtp",
-    host: process.env.SMTP_HOST,          
-    port: Number(process.env.SMTP_PORT), 
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
     secure: process.env.EMAIL_SECURE === "true",
     auth: {
-      user: process.env.EMAIL_USER,       
-      pass: process.env.EMAIL_PASS,  
-    }
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
   });
 };
 
@@ -50,10 +49,9 @@ export const sendEnquiry = async (req, res) => {
     await transporter.verify();
 
     await transporter.sendMail({
-      service:"smtp",
-      from: `"Skyraan Academy Website" <${process.env.ADMIN_EMAIL}>`,
-      to: process.env.ADMIN_EMAIL,
-      replyTo: email, 
+      from: `"Skyraan Academy Website" <${process.env.EMAIL_USER}>`,
+      to: process.env.EMAIL_USER,
+      replyTo: email,
       subject: `New ${
         type === "course" ? "Course Enquiry" : "Contact Message"
       } from ${name}`,
@@ -73,8 +71,7 @@ export const sendEnquiry = async (req, res) => {
 
     try {
       await transporter.sendMail({
-        service:"smtp",
-        from: `"Skyraan Academy" <${process.env.ADMIN_EMAIL}>`,
+        from: `"Skyraan Academy" <${process.env.EMAIL_USER}>`,
         to: email,
         subject: "We received your enquiry – Skyraan Academy",
         html: `
@@ -93,7 +90,6 @@ export const sendEnquiry = async (req, res) => {
         `,
       });
     } catch (mailError) {
-
       if (mailError.responseCode === 550) {
         return res.status(400).json({
           success: false,
@@ -110,14 +106,7 @@ export const sendEnquiry = async (req, res) => {
       `INSERT INTO enquiries 
        (name, email, message, course_name, type, status) 
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        name,
-        email,
-        message,
-        course_name || "none",
-        type || "contact",
-        "new",
-      ]
+      [name, email, message, course_name || "none", type || "contact", "new"],
     );
 
     return res.status(200).json({
@@ -138,7 +127,7 @@ export const getAllEnquiries = async (req, res) => {
     const [rows] = await db.query(
       `SELECT * FROM enquiries 
        WHERE deleted_at IS NULL 
-       ORDER BY created_at DESC`
+       ORDER BY created_at DESC`,
     );
 
     return res.status(200).json({
@@ -162,7 +151,7 @@ export const markEnquiryViewed = async (req, res) => {
       `UPDATE enquiries 
        SET status = 'viewed', updated_at = NOW() 
        WHERE id = ?`,
-      [id]
+      [id],
     );
 
     return res.json({ success: true });
@@ -180,7 +169,7 @@ export const deleteEnquiry = async (req, res) => {
       `UPDATE enquiries 
        SET deleted_at = NOW(), updated_at = NOW() 
        WHERE id = ?`,
-      [id]
+      [id],
     );
 
     return res.json({ success: true });

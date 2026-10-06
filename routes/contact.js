@@ -5,32 +5,75 @@ const router = express.Router();
 
 router.post("/", async (req, res) => {
   try {
-    const { name, email, message } = req.body;
+    const { name, phone, email, message } = req.body;
 
-    if (!name || !email || !message) {
+    if (!name || !phone || !email || !message) {
       return res
         .status(400)
         .json({ success: false, message: "All fields are required" });
     }
 
+    const cleanPhone = String(phone).replace(/\D/g, "");
+
+    const phoneRules = [
+      { code: "91", min: 10, max: 10 },
+      { code: "1", min: 10, max: 10 },
+      { code: "44", min: 10, max: 10 },
+      { code: "971", min: 9, max: 9 },
+      { code: "61", min: 9, max: 9 },
+      { code: "65", min: 8, max: 8 },
+      { code: "60", min: 9, max: 10 },
+      { code: "49", min: 5, max: 11 },
+      { code: "33", min: 9, max: 9 },
+    ];
+
+    const matchedRule = phoneRules.find((rule) =>
+      cleanPhone.startsWith(rule.code),
+    );
+
+    if (!matchedRule) {
+      return res.status(400).json({
+        success: false,
+        message: "Unsupported phone country code",
+      });
+    }
+
+    const nationalNumber = cleanPhone.slice(matchedRule.code.length);
+
+    if (
+      nationalNumber.length < matchedRule.min ||
+      nationalNumber.length > matchedRule.max
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          matchedRule.min === matchedRule.max
+            ? `Phone number must be ${matchedRule.min} digits`
+            : `Phone number must be between ${matchedRule.min} and ${matchedRule.max} digits`,
+      });
+    }
+
+    const smtpPort = Number(process.env.SMTP_PORT) || 587;
+
     const transporter = nodemailer.createTransport({
-      service:"smtp",
-      host: process.env.SMTP_HOST,          
-      port: Number(process.env.SMTP_PORT), 
-      secure: process.env.EMAIL_SECURE === "true",
+      host: process.env.SMTP_HOST,
+      port: smtpPort,
+      secure:
+        process.env.EMAIL_SECURE !== undefined
+          ? process.env.EMAIL_SECURE === "true"
+          : smtpPort === 465,
       auth: {
-        user: process.env.EMAIL_USER,      
-        pass: process.env.EMAIL_PASS,       
-      }
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
     });
 
     await transporter.verify();
 
     await transporter.sendMail({
-      service:"smtp",
-      from: `"Skyraan Academy Website" <${process.env.EMAIL_USER}>`, 
-      to: process.env.ADMIN_EMAIL,
-      replyTo: email, 
+      from: `"Skyraan Academy Website" <${process.env.EMAIL_USER}>`,
+      to: process.env.EMAIL_USER,
+      replyTo: email,
       subject: `New Contact Message from ${name}`,
       html: `
         <div style="font-family:Arial,sans-serif;padding:20px;">
@@ -46,7 +89,6 @@ router.post("/", async (req, res) => {
     });
 
     await transporter.sendMail({
-      service:"smtp",
       from: `"Skyraan Academy" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "We received your message – Skyraan Academy",

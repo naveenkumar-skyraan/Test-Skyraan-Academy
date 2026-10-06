@@ -1,18 +1,19 @@
-
 import fs from "fs";
 import path from "path";
+
 import {
   getGallerySections,
   getGallerySectionById,
   createGallerySection,
   updateGallerySection,
-  updateGallerySectionStatus,
+  updateGallerySectionStatus as updateGallerySectionStatusModel,
   deleteGallerySection,
   getGalleryItems,
   getGalleryItemById,
   createGalleryItem,
+  createGalleryItemsBulk,
   updateGalleryItem,
-  updateGalleryItemStatus,
+  updateGalleryItemStatus as updateGalleryItemStatusModel,
   deleteGalleryItem,
 } from "../models/galleryModel.js";
 
@@ -89,8 +90,10 @@ export const changeGallerySectionStatus = async (id, status) => {
     throw new Error("Invalid section status");
   }
 
-  return await updateGallerySectionStatus(id, status);
+  return await updateGallerySectionStatusModel(id, status);
 };
+
+export const updateGallerySectionStatus = changeGallerySectionStatus;
 
 export const removeGallerySection = async (id) => {
   const existingSection = await getGallerySectionById(id);
@@ -162,11 +165,6 @@ export const addGalleryItem = async (data) => {
   }
 
   const title = data.title?.trim() || null;
-
-  const sortOrder = Number.isInteger(Number(data.sort_order))
-    ? Number(data.sort_order)
-    : 0;
-
   const status =
     data.status === "inactive" ? "inactive" : "active";
 
@@ -175,9 +173,58 @@ export const addGalleryItem = async (data) => {
     title,
     media_type: data.media_type,
     media_path: data.media_path,
-    sort_order: sortOrder,
     status,
   });
+};
+
+export const addGalleryItemsBulk = async ({
+  section_id,
+  files,
+}) => {
+  const sectionId = Number(section_id);
+
+  if (!Number.isInteger(sectionId) || sectionId <= 0) {
+    throw new Error("Valid section is required");
+  }
+
+  if (!Array.isArray(files) || files.length === 0) {
+    throw new Error("At least one image is required");
+  }
+
+  if (files.length > 20) {
+    throw new Error("Maximum 20 images are allowed per upload");
+  }
+
+  const section = await getGallerySectionById(sectionId);
+
+  if (!section) {
+    throw new Error("Gallery section not found");
+  }
+
+  const invalidFile = files.find(
+    (file) => !file.mimetype?.startsWith("image/")
+  );
+
+  if (invalidFile) {
+    throw new Error(
+      `Only images are allowed in bulk upload: ${invalidFile.originalname}`
+    );
+  }
+
+  const items = files.map((file) => {
+    const title =
+      path.parse(file.originalname).name.trim() || null;
+
+    return {
+      section_id: sectionId,
+      title,
+      media_type: "image",
+      media_path: `/uploads/gallery/${file.filename}`,
+      status: "active",
+    };
+  });
+
+  return await createGalleryItemsBulk(items);
 };
 
 export const editGalleryItem = async (id, data) => {
@@ -213,7 +260,7 @@ export const editGalleryItem = async (id, data) => {
 
   const sortOrder = Number.isInteger(Number(data.sort_order))
     ? Number(data.sort_order)
-    : 0;
+    : Number(existingItem.sort_order || 0);
 
   const status =
     data.status === "inactive" ? "inactive" : "active";
@@ -239,8 +286,10 @@ export const changeGalleryItemStatus = async (id, status) => {
     throw new Error("Invalid gallery item status");
   }
 
-  return await updateGalleryItemStatus(id, status);
+  return await updateGalleryItemStatusModel(id, status);
 };
+
+export const updateGalleryItemStatus = changeGalleryItemStatus;
 
 export const removeGalleryItem = async (id) => {
   const existingItem = await getGalleryItemById(id);
@@ -253,7 +302,11 @@ export const removeGalleryItem = async (id) => {
 
   if (deleted && existingItem.media_path) {
     const relativePath = existingItem.media_path.replace(/^\/+/, "");
-    const fullPath = path.join(process.cwd(), relativePath);
+
+    const fullPath = path.join(
+      process.cwd(),
+      relativePath
+    );
 
     try {
       if (fs.existsSync(fullPath)) {
